@@ -216,6 +216,65 @@ The `hat_scale` parameter controls how large the Santa hat appears relative to t
 
 Valid range: `0.1` to `5.0`
 
+### Safety Limits
+
+The API includes built-in safety limits to prevent abuse and ensure reliable operation:
+
+**File & Image Limits:**
+- Maximum file size: 10 MB (configurable via `MAX_FILE_SIZE_MB`)
+- Maximum image dimensions: 4000x4000 pixels (configurable via `MAX_IMAGE_WIDTH`, `MAX_IMAGE_HEIGHT`)
+- Maximum total pixels: 16 megapixels (configurable via `MAX_IMAGE_PIXELS`)
+- Maximum faces per image: 10 (configurable via `MAX_FACES`)
+
+**Allowed Image Formats:**
+- JPEG, PNG, WebP, GIF, BMP
+- Other formats will be rejected
+
+**URL Safety:**
+- Maximum URL length: 2048 characters
+- Blocks requests to private/internal networks (prevents SSRF attacks)
+- Blocks localhost, private IPs (10.x, 172.16.x, 192.168.x, 127.0.0.1)
+- Only HTTP/HTTPS protocols allowed
+- URL fetch timeout: 30 seconds
+
+**Configuration:**
+
+All limits can be customized via environment variables:
+
+```bash
+MAX_FILE_SIZE_MB=10
+MAX_IMAGE_WIDTH=4000
+MAX_IMAGE_HEIGHT=4000
+MAX_IMAGE_PIXELS=16000000
+MAX_FACES=10
+URL_FETCH_TIMEOUT_SECONDS=30
+MAX_URL_LENGTH=2048
+```
+
+**Checking Current Limits:**
+
+View active limits via the `/health` endpoint:
+
+```bash
+curl http://localhost:8000/health
+```
+
+Response includes:
+```json
+{
+  "status": "healthy",
+  "limits": {
+    "max_file_size_mb": 10,
+    "max_image_width": 4000,
+    "max_image_height": 4000,
+    "max_image_pixels": 16000000,
+    "max_faces": 10,
+    "url_fetch_timeout_seconds": 30,
+    "allowed_image_types": ["image/jpeg", "image/png", "image/webp", "image/gif", "image/bmp"]
+  }
+}
+```
+
 ### S3 Caching (Optional)
 
 Enable S3-based caching to speed up repeated requests for the same images. When enabled, processed images are cached in S3 and returned instantly on subsequent requests.

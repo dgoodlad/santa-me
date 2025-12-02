@@ -10,6 +10,7 @@ from pydantic import BaseModel, HttpUrl, Field
 from app.face_detection import FaceDetector
 from app.image_processing import SantaHatProcessor
 from app.s3_cache import S3Cache
+from app.config import Config
 
 
 class SantaHatifyURLRequest(BaseModel):
@@ -57,7 +58,8 @@ async def health_check():
         "status": "healthy",
         "face_detector": "ready",
         "hat_processor": "ready" if hat_processor else "not configured (missing santa_hat.png)",
-        "s3_cache": "enabled" if s3_cache.enabled else "disabled"
+        "s3_cache": "enabled" if s3_cache.enabled else "disabled",
+        "limits": Config.get_limits_info()
     }
 
 
@@ -92,6 +94,14 @@ async def santa_hatify_get(
             detail="hat_scale must be between 0 and 5"
         )
 
+    # Validate URL safety (prevent SSRF attacks)
+    is_valid, error_msg = Config.validate_url_safety(url)
+    if not is_valid:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid URL: {error_msg}"
+        )
+
     try:
         # Generate cache key and check cache
         cache_key = await s3_cache.generate_cache_key_from_url(url, hat_scale)
@@ -116,7 +126,7 @@ async def santa_hatify_get(
         print(f"Cache MISS: {cache_key or 'no cache key'}")
 
         # Fetch image from URL
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=Config.URL_FETCH_TIMEOUT_SECONDS) as client:
             try:
                 response = await client.get(url)
                 response.raise_for_status()
@@ -133,17 +143,56 @@ async def santa_hatify_get(
 
             # Validate content type
             content_type = response.headers.get("content-type", "")
-            if not content_type.startswith("image/"):
+            if content_type not in Config.ALLOWED_IMAGE_TYPES:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"URL does not point to an image. Content-Type: {content_type}"
+                    detail=f"Unsupported image type: {content_type}. Allowed types: {', '.join(Config.ALLOWED_IMAGE_TYPES)}"
+                )
+
+            # Check content length
+            content_length = response.headers.get("content-length")
+            if content_length and int(content_length) > Config.MAX_FILE_SIZE_BYTES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Image too large. Maximum size: {Config.MAX_FILE_SIZE_MB}MB"
                 )
 
             contents = response.content
+
+            # Double-check actual size
+            if len(contents) > Config.MAX_FILE_SIZE_BYTES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Image too large. Maximum size: {Config.MAX_FILE_SIZE_MB}MB"
+                )
+
             filename = url.split("/")[-1].split("?")[0] or "image.jpg"
 
         # Read and open image
         image = Image.open(io.BytesIO(contents))
+
+        # Validate image format
+        if image.format not in Config.ALLOWED_PIL_FORMATS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported image format: {image.format}. Allowed formats: {', '.join(Config.ALLOWED_PIL_FORMATS)}"
+            )
+
+        # Validate image dimensions
+        width, height = image.size
+        if width > Config.MAX_IMAGE_WIDTH or height > Config.MAX_IMAGE_HEIGHT:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Image dimensions too large. Maximum: {Config.MAX_IMAGE_WIDTH}x{Config.MAX_IMAGE_HEIGHT}px, got: {width}x{height}px"
+            )
+
+        # Validate total pixels
+        total_pixels = width * height
+        if total_pixels > Config.MAX_IMAGE_PIXELS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Image has too many pixels. Maximum: {Config.MAX_IMAGE_PIXELS}, got: {total_pixels}"
+            )
 
         # Convert to RGB if necessary
         if image.mode not in ('RGB', 'RGBA'):
@@ -157,6 +206,11 @@ async def santa_hatify_get(
                 status_code=404,
                 detail="No faces detected in the image. Please upload an image with visible faces."
             )
+
+        # Limit number of faces processed
+        if len(faces) > Config.MAX_FACES:
+            faces = faces[:Config.MAX_FACES]
+            print(f"Warning: Image has more than {Config.MAX_FACES} faces, limiting to {Config.MAX_FACES}")
 
         # Process image with Santa hats
         result_image = hat_processor.process_image(image, faces, hat_scale)
@@ -272,6 +326,15 @@ async def santa_hatify(
             detail="hat_scale must be between 0 and 5"
         )
 
+    # Validate URL safety if URL is provided
+    if url is not None:
+        is_valid, error_msg = Config.validate_url_safety(url)
+        if not is_valid:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid URL: {error_msg}"
+            )
+
     try:
         # Generate cache key and check cache before processing
         cache_key = None
@@ -301,12 +364,21 @@ async def santa_hatify(
         # Get image data from either file upload or URL
         if file is not None:
             # Validate file type
-            if not file.content_type.startswith("image/"):
+            if file.content_type not in Config.ALLOWED_IMAGE_TYPES:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Invalid file type: {file.content_type}. Please upload an image file."
+                    detail=f"Unsupported image type: {file.content_type}. Allowed types: {', '.join(Config.ALLOWED_IMAGE_TYPES)}"
                 )
+
             contents = await file.read()
+
+            # Validate file size
+            if len(contents) > Config.MAX_FILE_SIZE_BYTES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"File too large. Maximum size: {Config.MAX_FILE_SIZE_MB}MB"
+                )
+
             filename = file.filename
 
             # Generate cache key from file hash
@@ -326,7 +398,7 @@ async def santa_hatify(
                 )
         else:
             # Fetch image from URL
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=Config.URL_FETCH_TIMEOUT_SECONDS) as client:
                 try:
                     response = await client.get(url)
                     response.raise_for_status()
@@ -343,18 +415,57 @@ async def santa_hatify(
 
                 # Validate content type
                 content_type = response.headers.get("content-type", "")
-                if not content_type.startswith("image/"):
+                if content_type not in Config.ALLOWED_IMAGE_TYPES:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"URL does not point to an image. Content-Type: {content_type}"
+                        detail=f"Unsupported image type: {content_type}. Allowed types: {', '.join(Config.ALLOWED_IMAGE_TYPES)}"
+                    )
+
+                # Check content length
+                content_length = response.headers.get("content-length")
+                if content_length and int(content_length) > Config.MAX_FILE_SIZE_BYTES:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Image too large. Maximum size: {Config.MAX_FILE_SIZE_MB}MB"
                     )
 
                 contents = response.content
+
+                # Double-check actual size
+                if len(contents) > Config.MAX_FILE_SIZE_BYTES:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Image too large. Maximum size: {Config.MAX_FILE_SIZE_MB}MB"
+                    )
+
                 # Extract filename from URL or use default
                 filename = url.split("/")[-1].split("?")[0] or "image.jpg"
 
         # Read and open image
         image = Image.open(io.BytesIO(contents))
+
+        # Validate image format
+        if image.format not in Config.ALLOWED_PIL_FORMATS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported image format: {image.format}. Allowed formats: {', '.join(Config.ALLOWED_PIL_FORMATS)}"
+            )
+
+        # Validate image dimensions
+        width, height = image.size
+        if width > Config.MAX_IMAGE_WIDTH or height > Config.MAX_IMAGE_HEIGHT:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Image dimensions too large. Maximum: {Config.MAX_IMAGE_WIDTH}x{Config.MAX_IMAGE_HEIGHT}px, got: {width}x{height}px"
+            )
+
+        # Validate total pixels
+        total_pixels = width * height
+        if total_pixels > Config.MAX_IMAGE_PIXELS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Image has too many pixels. Maximum: {Config.MAX_IMAGE_PIXELS}, got: {total_pixels}"
+            )
 
         # Convert to RGB if necessary (handle RGBA, grayscale, etc.)
         if image.mode not in ('RGB', 'RGBA'):
@@ -368,6 +479,11 @@ async def santa_hatify(
                 status_code=404,
                 detail="No faces detected in the image. Please upload an image with visible faces."
             )
+
+        # Limit number of faces processed
+        if len(faces) > Config.MAX_FACES:
+            faces = faces[:Config.MAX_FACES]
+            print(f"Warning: Image has more than {Config.MAX_FACES} faces, limiting to {Config.MAX_FACES}")
 
         # Process image with Santa hats
         result_image = hat_processor.process_image(image, faces, hat_scale)

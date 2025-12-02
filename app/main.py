@@ -61,6 +61,148 @@ async def health_check():
     }
 
 
+@app.get("/santa-hatify")
+async def santa_hatify_get(
+    url: str,
+    hat_scale: float = 1.0
+):
+    """
+    Add Santa hats to an image from a URL (Slack-friendly GET endpoint).
+
+    This endpoint is designed for easy Slack integration - just paste a URL like:
+    https://your-api.com/santa-hatify?url=https://example.com/photo.jpg
+
+    Args:
+        url: URL of image to process (required)
+        hat_scale: Optional multiplier for hat size (default: 1.0)
+
+    Returns:
+        Processed image with Santa hats added
+    """
+    if hat_processor is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Santa hat processor not configured. Please add static/santa_hat.png file."
+        )
+
+    # Validate hat_scale
+    if hat_scale <= 0 or hat_scale > 5:
+        raise HTTPException(
+            status_code=400,
+            detail="hat_scale must be between 0 and 5"
+        )
+
+    try:
+        # Generate cache key and check cache
+        cache_key = await s3_cache.generate_cache_key_from_url(url, hat_scale)
+        cached_image = None
+
+        if cache_key:
+            cached_image = await s3_cache.get_cached_image(cache_key)
+
+        # If cache hit, return immediately
+        if cached_image:
+            print(f"Cache HIT: {cache_key}")
+            filename = url.split("/")[-1].split("?")[0] or "cached_image.jpg"
+            return StreamingResponse(
+                io.BytesIO(cached_image),
+                media_type="image/jpeg",
+                headers={
+                    "Content-Disposition": f"inline; filename=santa_{filename}",
+                    "X-Cache-Status": "HIT"
+                }
+            )
+
+        print(f"Cache MISS: {cache_key or 'no cache key'}")
+
+        # Fetch image from URL
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                response = await client.get(url)
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Failed to fetch image from URL: HTTP {e.response.status_code}"
+                )
+            except httpx.RequestError as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Failed to fetch image from URL: {str(e)}"
+                )
+
+            # Validate content type
+            content_type = response.headers.get("content-type", "")
+            if not content_type.startswith("image/"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"URL does not point to an image. Content-Type: {content_type}"
+                )
+
+            contents = response.content
+            filename = url.split("/")[-1].split("?")[0] or "image.jpg"
+
+        # Read and open image
+        image = Image.open(io.BytesIO(contents))
+
+        # Convert to RGB if necessary
+        if image.mode not in ('RGB', 'RGBA'):
+            image = image.convert('RGB')
+
+        # Detect faces
+        faces = face_detector.detect_faces(image)
+
+        if not faces:
+            raise HTTPException(
+                status_code=404,
+                detail="No faces detected in the image. Please upload an image with visible faces."
+            )
+
+        # Process image with Santa hats
+        result_image = hat_processor.process_image(image, faces, hat_scale)
+
+        # Convert back to RGB for JPEG output
+        if result_image.mode == 'RGBA':
+            rgb_image = Image.new('RGB', result_image.size, (255, 255, 255))
+            rgb_image.paste(result_image, mask=result_image.split()[3])
+            result_image = rgb_image
+
+        # Save to bytes buffer
+        img_buffer = io.BytesIO()
+        result_image.save(img_buffer, format='JPEG', quality=95)
+        img_buffer.seek(0)
+        img_bytes = img_buffer.getvalue()
+
+        # Store in cache
+        if cache_key:
+            await s3_cache.store_cached_image(
+                cache_key,
+                img_bytes,
+                metadata={"faces_detected": len(faces)}
+            )
+
+        # Reset buffer for response
+        img_buffer.seek(0)
+
+        return StreamingResponse(
+            img_buffer,
+            media_type="image/jpeg",
+            headers={
+                "Content-Disposition": f"inline; filename=santa_{filename}",
+                "X-Faces-Detected": str(len(faces)),
+                "X-Cache-Status": "MISS"
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error processing image: {str(e)}"
+        )
+
+
 @app.post("/santa-hatify")
 async def santa_hatify(
     request: Request,

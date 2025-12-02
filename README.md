@@ -60,9 +60,49 @@ Visit `http://localhost:8000/docs` for interactive API documentation.
 
 ## API Endpoints
 
+### GET `/santa-hatify` (Slack-friendly)
+
+Add Santa hats to an image from a URL using a simple GET request. Perfect for Slack bots and quick integrations!
+
+**Parameters:**
+- `url` (required): URL of the image to process
+- `hat_scale` (optional): Scale multiplier (default: 1.0)
+
+**Response:**
+- Processed JPEG image with Santa hats
+- Header `X-Faces-Detected`: Number of faces found
+- Header `X-Cache-Status`: `HIT` or `MISS`
+
+**Example:**
+
+```bash
+# Simple URL
+https://your-api.com/santa-hatify?url=https://example.com/photo.jpg
+
+# With custom hat scale
+https://your-api.com/santa-hatify?url=https://example.com/photo.jpg&hat_scale=1.2
+```
+
+**Using curl:**
+
+```bash
+curl "https://your-api.com/santa-hatify?url=https://example.com/photo.jpg" \
+  --output santa_photo.jpg
+```
+
+**Slack Integration:**
+
+Simply paste the URL into Slack and it will display the santa-hatted image:
+
+```
+https://your-api.com/santa-hatify?url=https://example.com/photo.jpg
+```
+
+Slack will automatically unfurl and display the processed image inline!
+
 ### POST `/santa-hatify`
 
-Add Santa hats to all faces in an image.
+Add Santa hats to all faces in an image (supports file uploads and more options).
 
 **Request options:**
 
@@ -226,6 +266,82 @@ Check cache status via the `/health` endpoint:
   "s3_cache": "enabled"
 }
 ```
+
+## Slack Bot Integration
+
+The GET endpoint is specifically designed for Slack integration. Here's how to use it:
+
+### Quick Start
+
+1. Deploy your API (Railway, Fly.io, etc.)
+2. In Slack, paste a URL like:
+   ```
+   https://your-api.com/santa-hatify?url=https://example.com/photo.jpg
+   ```
+3. Slack automatically displays the santa-hatted image!
+
+### Building a Slack Bot
+
+**Example slash command handler:**
+
+```python
+from slack_bolt import App
+
+app = App(token="YOUR_BOT_TOKEN", signing_secret="YOUR_SIGNING_SECRET")
+
+@app.command("/santahatify")
+def santahatify_command(ack, command, respond):
+    ack()
+
+    # Get image URL from command text
+    image_url = command['text'].strip()
+
+    if not image_url:
+        respond("Please provide an image URL!")
+        return
+
+    # Generate santa-hatify URL
+    api_url = f"https://your-api.com/santa-hatify?url={image_url}"
+
+    # Send the processed image URL back to Slack
+    respond({
+        "response_type": "in_channel",
+        "blocks": [
+            {
+                "type": "image",
+                "image_url": api_url,
+                "alt_text": "Santa-hatified image"
+            }
+        ]
+    })
+
+if __name__ == "__main__":
+    app.start(port=3000)
+```
+
+**Example URL unfurling:**
+
+When someone pastes an image URL in Slack, automatically respond with the santa-hatted version:
+
+```python
+@app.event("link_shared")
+def handle_link_shared(event, client):
+    for link in event['links']:
+        url = link['url']
+        if is_image_url(url):  # Your image detection logic
+            santa_url = f"https://your-api.com/santa-hatify?url={url}"
+            client.chat_postMessage(
+                channel=event['channel'],
+                text=f"Here's the Santa Hat version: {santa_url}"
+            )
+```
+
+### Tips for Slack Integration
+
+- **S3 caching recommended**: Enables instant responses for repeated images
+- **Use `hat_scale`**: Adjust hat size per your preference (default 1.0)
+- **Error handling**: The API returns 404 if no faces are detected
+- **Timeouts**: First request may take 5-10s for processing, cached requests are instant
 
 ## Technical Details
 

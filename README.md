@@ -1,5 +1,7 @@
 # Santa Hat API
 
+_NOTE_ this is 100% vibe-coded slop, but it worked for me. Good luck to you if you run it yourself, don't blame me for anything here.
+
 Add Santa hats to photos using AI-powered face detection! This REST API detects faces in images and automatically positions Santa hats on people's heads.
 
 ## Features

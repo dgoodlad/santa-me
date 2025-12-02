@@ -1,13 +1,20 @@
 """Santa Hat API - Add Santa hats to photos using face detection."""
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Request
 from fastapi.responses import StreamingResponse
 from PIL import Image
 import io
 from typing import Optional
 import httpx
+from pydantic import BaseModel, HttpUrl, Field
 
 from app.face_detection import FaceDetector
 from app.image_processing import SantaHatProcessor
+
+
+class SantaHatifyURLRequest(BaseModel):
+    """Request model for URL-based image processing."""
+    url: HttpUrl = Field(..., description="URL of image to process")
+    hat_scale: Optional[float] = Field(1.0, description="Optional scale multiplier (default: 1.0)", ge=0.01, le=5.0)
 
 
 app = FastAPI(
@@ -51,17 +58,26 @@ async def health_check():
 
 @app.post("/santa-hatify")
 async def santa_hatify(
-    file: Optional[UploadFile] = File(None, description="Image file to process"),
-    url: Optional[str] = Form(None, description="URL of image to process"),
+    request: Request,
+    file: Optional[UploadFile] = File(None, description="Image file to process (multipart/form-data)"),
+    url: Optional[str] = Form(None, description="URL of image to process (multipart/form-data)"),
     hat_scale: Optional[float] = Form(1.0, description="Optional scale multiplier (default: 1.0)")
 ):
     """
     Add Santa hats to all faces detected in the uploaded image or image from URL.
 
-    Args:
+    Accepts two content types:
+    - multipart/form-data: For file uploads or URL with form fields
+    - application/json: For URL-based processing with JSON body
+
+    Args (multipart/form-data):
         file: Image file (JPEG, PNG, etc.) - provide either file or url, not both
         url: URL of image to process - provide either file or url, not both
         hat_scale: Optional multiplier for hat size (default: 1.0, uses metadata config)
+
+    Args (application/json):
+        url: URL of image to process
+        hat_scale: Optional multiplier for hat size (default: 1.0)
 
     Returns:
         Processed image with Santa hats added
@@ -71,6 +87,23 @@ async def santa_hatify(
             status_code=503,
             detail="Santa hat processor not configured. Please add static/santa_hat.png file."
         )
+
+    # Check content type and parse accordingly
+    content_type = request.headers.get("content-type", "")
+
+    if "application/json" in content_type:
+        # Handle JSON request
+        try:
+            json_body = await request.json()
+            json_request = SantaHatifyURLRequest(**json_body)
+            url = str(json_request.url)
+            hat_scale = json_request.hat_scale
+            file = None
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid JSON body: {str(e)}"
+            )
 
     # Validate that exactly one input method is provided
     if file is None and url is None:

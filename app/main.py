@@ -4,6 +4,7 @@ from fastapi.responses import StreamingResponse
 from PIL import Image
 import io
 from typing import Optional
+import httpx
 
 from app.face_detection import FaceDetector
 from app.image_processing import SantaHatProcessor
@@ -50,14 +51,16 @@ async def health_check():
 
 @app.post("/santa-hatify")
 async def santa_hatify(
-    file: UploadFile = File(..., description="Image file to process"),
+    file: Optional[UploadFile] = File(None, description="Image file to process"),
+    url: Optional[str] = Form(None, description="URL of image to process"),
     hat_scale: Optional[float] = Form(1.0, description="Optional scale multiplier (default: 1.0)")
 ):
     """
-    Add Santa hats to all faces detected in the uploaded image.
+    Add Santa hats to all faces detected in the uploaded image or image from URL.
 
     Args:
-        file: Image file (JPEG, PNG, etc.)
+        file: Image file (JPEG, PNG, etc.) - provide either file or url, not both
+        url: URL of image to process - provide either file or url, not both
         hat_scale: Optional multiplier for hat size (default: 1.0, uses metadata config)
 
     Returns:
@@ -69,11 +72,17 @@ async def santa_hatify(
             detail="Santa hat processor not configured. Please add static/santa_hat.png file."
         )
 
-    # Validate file type
-    if not file.content_type.startswith("image/"):
+    # Validate that exactly one input method is provided
+    if file is None and url is None:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid file type: {file.content_type}. Please upload an image file."
+            detail="Please provide either a file upload or an image URL"
+        )
+
+    if file is not None and url is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Please provide either a file or URL, not both"
         )
 
     # Validate hat_scale
@@ -84,8 +93,46 @@ async def santa_hatify(
         )
 
     try:
+        # Get image data from either file upload or URL
+        if file is not None:
+            # Validate file type
+            if not file.content_type.startswith("image/"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid file type: {file.content_type}. Please upload an image file."
+                )
+            contents = await file.read()
+            filename = file.filename
+        else:
+            # Fetch image from URL
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                try:
+                    response = await client.get(url)
+                    response.raise_for_status()
+                except httpx.HTTPStatusError as e:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Failed to fetch image from URL: HTTP {e.response.status_code}"
+                    )
+                except httpx.RequestError as e:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Failed to fetch image from URL: {str(e)}"
+                    )
+
+                # Validate content type
+                content_type = response.headers.get("content-type", "")
+                if not content_type.startswith("image/"):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"URL does not point to an image. Content-Type: {content_type}"
+                    )
+
+                contents = response.content
+                # Extract filename from URL or use default
+                filename = url.split("/")[-1].split("?")[0] or "image.jpg"
+
         # Read and open image
-        contents = await file.read()
         image = Image.open(io.BytesIO(contents))
 
         # Convert to RGB if necessary (handle RGBA, grayscale, etc.)
@@ -120,7 +167,7 @@ async def santa_hatify(
             img_buffer,
             media_type="image/jpeg",
             headers={
-                "Content-Disposition": f"inline; filename=santa_{file.filename}",
+                "Content-Disposition": f"inline; filename=santa_{filename}",
                 "X-Faces-Detected": str(len(faces))
             }
         )

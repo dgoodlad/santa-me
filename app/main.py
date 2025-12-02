@@ -9,6 +9,7 @@ from pydantic import BaseModel, HttpUrl, Field
 
 from app.face_detection import FaceDetector
 from app.image_processing import SantaHatProcessor
+from app.s3_cache import S3Cache
 
 
 class SantaHatifyURLRequest(BaseModel):
@@ -23,7 +24,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Initialize face detector and hat processor (singleton pattern)
+# Initialize face detector, hat processor, and S3 cache (singleton pattern)
 face_detector = FaceDetector()
 try:
     hat_processor = SantaHatProcessor()
@@ -31,6 +32,9 @@ except FileNotFoundError as e:
     print(f"Warning: {e}")
     print("The API will start but /santa-hatify endpoint will not work until you add a Santa hat image.")
     hat_processor = None
+
+# Initialize S3 cache
+s3_cache = S3Cache()
 
 
 @app.get("/")
@@ -52,7 +56,8 @@ async def health_check():
     return {
         "status": "healthy",
         "face_detector": "ready",
-        "hat_processor": "ready" if hat_processor else "not configured (missing santa_hat.png)"
+        "hat_processor": "ready" if hat_processor else "not configured (missing santa_hat.png)",
+        "s3_cache": "enabled" if s3_cache.enabled else "disabled"
     }
 
 
@@ -126,6 +131,31 @@ async def santa_hatify(
         )
 
     try:
+        # Generate cache key and check cache before processing
+        cache_key = None
+        cached_image = None
+
+        if url is not None:
+            # For URLs, use ETag/Last-Modified based cache key
+            cache_key = await s3_cache.generate_cache_key_from_url(url, hat_scale)
+            if cache_key:
+                cached_image = await s3_cache.get_cached_image(cache_key)
+
+        # If cache hit, return cached result immediately
+        if cached_image:
+            print(f"Cache HIT: {cache_key}")
+            filename = url.split("/")[-1].split("?")[0] if url else "cached_image.jpg"
+            return StreamingResponse(
+                io.BytesIO(cached_image),
+                media_type="image/jpeg",
+                headers={
+                    "Content-Disposition": f"inline; filename=santa_{filename}",
+                    "X-Cache-Status": "HIT"
+                }
+            )
+
+        print(f"Cache MISS: {cache_key or 'no cache key'}")
+
         # Get image data from either file upload or URL
         if file is not None:
             # Validate file type
@@ -136,6 +166,22 @@ async def santa_hatify(
                 )
             contents = await file.read()
             filename = file.filename
+
+            # Generate cache key from file hash
+            cache_key = s3_cache.generate_cache_key_from_hash(contents, hat_scale)
+            cached_image = await s3_cache.get_cached_image(cache_key)
+
+            # If cache hit, return cached result
+            if cached_image:
+                print(f"Cache HIT: {cache_key}")
+                return StreamingResponse(
+                    io.BytesIO(cached_image),
+                    media_type="image/jpeg",
+                    headers={
+                        "Content-Disposition": f"inline; filename=santa_{filename}",
+                        "X-Cache-Status": "HIT"
+                    }
+                )
         else:
             # Fetch image from URL
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -195,13 +241,26 @@ async def santa_hatify(
         img_buffer = io.BytesIO()
         result_image.save(img_buffer, format='JPEG', quality=95)
         img_buffer.seek(0)
+        img_bytes = img_buffer.getvalue()
+
+        # Store in cache if we have a cache key
+        if cache_key:
+            await s3_cache.store_cached_image(
+                cache_key,
+                img_bytes,
+                metadata={"faces_detected": len(faces)}
+            )
+
+        # Reset buffer for response
+        img_buffer.seek(0)
 
         return StreamingResponse(
             img_buffer,
             media_type="image/jpeg",
             headers={
                 "Content-Disposition": f"inline; filename=santa_{filename}",
-                "X-Faces-Detected": str(len(faces))
+                "X-Faces-Detected": str(len(faces)),
+                "X-Cache-Status": "MISS"
             }
         )
 

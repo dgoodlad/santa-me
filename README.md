@@ -64,20 +64,53 @@ Visit `http://localhost:8000/docs` for interactive API documentation.
 
 Add Santa hats to all faces in an image.
 
-**Request:**
-- `file`: Image file (multipart/form-data)
-- `hat_scale`: Optional float (default: 1.8) - Scale factor for hat size
+**Request options:**
+
+**Option 1: File upload (multipart/form-data)**
+- `file`: Image file
+- `hat_scale`: Optional float (default: 1.0) - Scale factor for hat size
+
+**Option 2: URL (multipart/form-data)**
+- `url`: Image URL
+- `hat_scale`: Optional float (default: 1.0) - Scale factor for hat size
+
+**Option 3: URL (application/json)**
+```json
+{
+  "url": "https://example.com/photo.jpg",
+  "hat_scale": 1.0
+}
+```
 
 **Response:**
 - Processed JPEG image with Santa hats
 - Header `X-Faces-Detected`: Number of faces found
+- Header `X-Cache-Status`: `HIT` or `MISS` (when S3 caching enabled)
 
-**Example using curl:**
+**Example using curl (file upload):**
 
 ```bash
 curl -X POST "http://localhost:8000/santa-hatify" \
   -F "file=@photo.jpg" \
-  -F "hat_scale=1.8" \
+  -F "hat_scale=1.0" \
+  --output santa_photo.jpg
+```
+
+**Example using curl (URL with JSON):**
+
+```bash
+curl -X POST "http://localhost:8000/santa-hatify" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com/photo.jpg", "hat_scale": 1.0}' \
+  --output santa_photo.jpg
+```
+
+**Example using curl (URL with form data):**
+
+```bash
+curl -X POST "http://localhost:8000/santa-hatify" \
+  -F "url=https://example.com/photo.jpg" \
+  -F "hat_scale=1.0" \
   --output santa_photo.jpg
 ```
 
@@ -142,6 +175,57 @@ The `hat_scale` parameter controls how large the Santa hat appears relative to t
 - `0.8` - Smaller, more subtle hat
 
 Valid range: `0.1` to `5.0`
+
+### S3 Caching (Optional)
+
+Enable S3-based caching to speed up repeated requests for the same images. When enabled, processed images are cached in S3 and returned instantly on subsequent requests.
+
+**Setup:**
+
+1. Create a `.env` file (see `.env.example`):
+
+```bash
+S3_BUCKET_NAME=your-bucket-name
+AWS_ACCESS_KEY_ID=your-access-key-id
+AWS_SECRET_ACCESS_KEY=your-secret-access-key
+AWS_REGION=us-east-1  # Optional, defaults to us-east-1
+```
+
+2. For Docker deployments, pass environment variables:
+
+```bash
+docker run -p 8000:8000 \
+  -e S3_BUCKET_NAME=your-bucket-name \
+  -e AWS_ACCESS_KEY_ID=your-key \
+  -e AWS_SECRET_ACCESS_KEY=your-secret \
+  --env-file .env \
+  santa-hat-api
+```
+
+**How it works:**
+
+- **URL-based requests:** Cache key uses ETag or Last-Modified headers for smart invalidation
+- **File uploads:** Cache key uses SHA-256 hash of file content
+- **Cache headers:** Response includes `X-Cache-Status: HIT` or `MISS`
+- **Automatic storage:** Processed images are automatically cached after generation
+
+**Benefits:**
+
+- Drastically faster response times for repeated requests (cache hits return instantly)
+- Reduced CPU usage and processing costs
+- Bandwidth savings for CDN delivery
+- Automatic cache invalidation when source images change (URL-based)
+
+Check cache status via the `/health` endpoint:
+
+```json
+{
+  "status": "healthy",
+  "face_detector": "ready",
+  "hat_processor": "ready",
+  "s3_cache": "enabled"
+}
+```
 
 ## Technical Details
 

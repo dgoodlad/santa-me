@@ -284,7 +284,11 @@ Enable S3-based caching to speed up repeated requests for the same images. When 
 1. Create a `.env` file (see `.env.example`):
 
 ```bash
+# Bucket name (supports both variable names)
 S3_BUCKET_NAME=your-bucket-name
+# OR AWS_S3_BUCKET_NAME=your-bucket-name
+
+# AWS Credentials
 AWS_ACCESS_KEY_ID=your-access-key-id
 AWS_SECRET_ACCESS_KEY=your-secret-access-key
 AWS_REGION=us-east-1  # Optional, defaults to us-east-1

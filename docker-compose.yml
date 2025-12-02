@@ -11,6 +11,8 @@ services:
       - ./static:/app/static:ro
     environment:
       - PYTHONUNBUFFERED=1
+    env_file:
+      - .env  # Load environment variables from .env file (optional)
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]

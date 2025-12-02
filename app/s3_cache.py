@@ -14,7 +14,8 @@ class S3Cache:
     def __init__(self):
         """Initialize S3 client with configuration from environment variables."""
         self.enabled = False
-        self.bucket_name = os.getenv("S3_BUCKET_NAME")
+        # Support both S3_BUCKET_NAME and AWS_S3_BUCKET_NAME
+        self.bucket_name = os.getenv("S3_BUCKET_NAME") or os.getenv("AWS_S3_BUCKET_NAME")
         self.region = os.getenv("AWS_REGION", "us-east-1")
 
         # Check if S3 is configured

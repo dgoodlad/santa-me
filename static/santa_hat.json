@@ -1,0 +1,15 @@
+{
+  "name": "Classic Santa Hat",
+  "positioning": {
+    "width_reference": "eye_distance",
+    "width_multiplier": 2.6,
+    "hat_anchor_point": {
+      "x": 0.35,
+      "y": 0.45
+    },
+    "horizontal_center": "midpoint_between_eyes",
+    "vertical_anchor": "forehead_top",
+    "vertical_offset_px": 0
+  },
+  "description": "Hat anchor at (0.5, 0.95) = bottom-center of hat aligns with target position"
+}

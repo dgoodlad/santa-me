@@ -33,6 +33,7 @@ wheels/
 htmlcov/
 coverage_html/
 coverage.xml
+tests/.cache/
 
 # IDE
 .vscode/

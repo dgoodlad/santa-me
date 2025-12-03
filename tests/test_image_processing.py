@@ -75,7 +75,7 @@ class TestSantaHatProcessor:
         self, 
         santa_hat_image, 
         sample_rgb_image, 
-        mock_face_data, 
+        sample_face_data, 
         tmp_path
     ):
         """Test that add_hat_to_face returns RGBA image."""
@@ -85,7 +85,7 @@ class TestSantaHatProcessor:
         from app.image_processing import SantaHatProcessor
         processor = SantaHatProcessor(hat_image_path=str(hat_path))
         
-        result = processor.add_hat_to_face(sample_rgb_image, mock_face_data)
+        result = processor.add_hat_to_face(sample_rgb_image, sample_face_data)
         
         assert result.mode == 'RGBA'
         assert result.size == sample_rgb_image.size
@@ -94,7 +94,7 @@ class TestSantaHatProcessor:
         self,
         santa_hat_image,
         sample_rgb_image,
-        mock_face_data,
+        sample_face_data,
         tmp_path
     ):
         """Test that the output image has same dimensions as input."""
@@ -104,7 +104,7 @@ class TestSantaHatProcessor:
         from app.image_processing import SantaHatProcessor
         processor = SantaHatProcessor(hat_image_path=str(hat_path))
         
-        result = processor.add_hat_to_face(sample_rgb_image, mock_face_data)
+        result = processor.add_hat_to_face(sample_rgb_image, sample_face_data)
         
         assert result.size == sample_rgb_image.size
 
@@ -155,7 +155,7 @@ class TestSantaHatProcessor:
         self,
         santa_hat_image,
         sample_rgb_image,
-        mock_face_data,
+        sample_face_data,
         tmp_path
     ):
         """Test that hat_scale parameter affects hat size."""
@@ -167,13 +167,13 @@ class TestSantaHatProcessor:
         
         # Different scales should produce valid results
         result_small = processor.add_hat_to_face(
-            sample_rgb_image.copy(), mock_face_data, hat_scale=0.5
+            sample_rgb_image.copy(), sample_face_data, hat_scale=0.5
         )
         result_normal = processor.add_hat_to_face(
-            sample_rgb_image.copy(), mock_face_data, hat_scale=1.0
+            sample_rgb_image.copy(), sample_face_data, hat_scale=1.0
         )
         result_large = processor.add_hat_to_face(
-            sample_rgb_image.copy(), mock_face_data, hat_scale=2.0
+            sample_rgb_image.copy(), sample_face_data, hat_scale=2.0
         )
         
         assert result_small.mode == 'RGBA'
@@ -184,7 +184,7 @@ class TestSantaHatProcessor:
         self,
         santa_hat_image,
         sample_rgb_image,
-        mock_tilted_face_data,
+        sample_tilted_face_data,
         tmp_path
     ):
         """Test that hat rotates to match tilted face."""
@@ -194,7 +194,7 @@ class TestSantaHatProcessor:
         from app.image_processing import SantaHatProcessor
         processor = SantaHatProcessor(hat_image_path=str(hat_path))
         
-        result = processor.add_hat_to_face(sample_rgb_image, mock_tilted_face_data)
+        result = processor.add_hat_to_face(sample_rgb_image, sample_tilted_face_data)
         
         assert result.mode == 'RGBA'
         assert result.size == sample_rgb_image.size
@@ -203,7 +203,7 @@ class TestSantaHatProcessor:
         self,
         santa_hat_image,
         sample_rgb_image,
-        mock_face_data,
+        sample_face_data,
         tmp_path
     ):
         """Test that forehead_width can be used as width reference."""
@@ -228,7 +228,7 @@ class TestSantaHatProcessor:
         from app.image_processing import SantaHatProcessor
         processor = SantaHatProcessor(hat_image_path=str(hat_path))
         
-        result = processor.add_hat_to_face(sample_rgb_image, mock_face_data)
+        result = processor.add_hat_to_face(sample_rgb_image, sample_face_data)
         
         assert result.mode == 'RGBA'
 
@@ -236,7 +236,7 @@ class TestSantaHatProcessor:
         self,
         santa_hat_image,
         sample_rgb_image,
-        mock_face_data,
+        sample_face_data,
         tmp_path
     ):
         """Test that horizontal_center can use forehead_top."""
@@ -260,7 +260,7 @@ class TestSantaHatProcessor:
         from app.image_processing import SantaHatProcessor
         processor = SantaHatProcessor(hat_image_path=str(hat_path))
         
-        result = processor.add_hat_to_face(sample_rgb_image, mock_face_data)
+        result = processor.add_hat_to_face(sample_rgb_image, sample_face_data)
         
         assert result.mode == 'RGBA'
 
@@ -286,7 +286,7 @@ class TestSantaHatProcessor:
         self,
         santa_hat_image,
         sample_rgb_image,
-        mock_multiple_faces,
+        sample_multiple_faces,
         tmp_path
     ):
         """Test that process_image adds hats to multiple faces."""
@@ -296,7 +296,7 @@ class TestSantaHatProcessor:
         from app.image_processing import SantaHatProcessor
         processor = SantaHatProcessor(hat_image_path=str(hat_path))
         
-        result = processor.process_image(sample_rgb_image, mock_multiple_faces)
+        result = processor.process_image(sample_rgb_image, sample_multiple_faces)
         
         assert result.mode == 'RGBA'
         assert result.size == sample_rgb_image.size
@@ -305,7 +305,7 @@ class TestSantaHatProcessor:
         self,
         santa_hat_image,
         sample_rgb_image,
-        mock_face_data,
+        sample_face_data,
         tmp_path
     ):
         """Test that process_image converts input to RGBA."""
@@ -317,7 +317,7 @@ class TestSantaHatProcessor:
         
         # Pass RGB image
         assert sample_rgb_image.mode == 'RGB'
-        result = processor.process_image(sample_rgb_image, [mock_face_data])
+        result = processor.process_image(sample_rgb_image, [sample_face_data])
         
         assert result.mode == 'RGBA'
 
@@ -325,7 +325,7 @@ class TestSantaHatProcessor:
         self,
         santa_hat_image,
         sample_rgb_image,
-        mock_multiple_faces,
+        sample_multiple_faces,
         tmp_path
     ):
         """Test that hat_scale is applied to all faces."""
@@ -336,7 +336,7 @@ class TestSantaHatProcessor:
         processor = SantaHatProcessor(hat_image_path=str(hat_path))
         
         result = processor.process_image(
-            sample_rgb_image, mock_multiple_faces, hat_scale=1.5
+            sample_rgb_image, sample_multiple_faces, hat_scale=1.5
         )
         
         assert result.mode == 'RGBA'

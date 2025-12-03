@@ -1,7 +1,7 @@
 # Makefile for Santa Hat API
 # Run tests and other development tasks
 
-.PHONY: help test test-unit test-debug test-file test-coverage test-watch build-test clean lint install install-dev venv
+.PHONY: help test test-unit test-debug test-file test-coverage test-watch build-test clean lint install install-dev install-deps venv
 
 define HELP_TEXT
 Santa Hat API - Development Commands
@@ -24,6 +24,7 @@ Build Commands:
 Development Commands:
   make install       - Install all dependencies (app + test)
   make install-dev   - Same as install (alias)
+  make install-deps  - Install dependencies including mediapipe
   make venv          - Create virtual environment and install dependencies
   make run           - Run the application locally
   make run-docker    - Run the application in Docker
@@ -109,6 +110,11 @@ install:
 
 # Alias for install
 install-dev: install
+
+# Install dependencies including mediapipe
+install-deps:
+	python -m pip install -r requirements.txt -r requirements-test.txt
+	python -m pip install mediapipe
 
 # Create virtual environment and install all dependencies
 venv:

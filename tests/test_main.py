@@ -10,11 +10,11 @@ import app.main
 
 
 @pytest.fixture
-def mock_app_dependencies(sample_rgba_image, mock_face_data):
+def mock_app_dependencies(sample_rgba_image, sample_face_data):
     """Setup mocked dependencies for API tests."""
     # Create mock face detector
     mock_detector = MagicMock()
-    mock_detector.detect_faces.return_value = [mock_face_data]
+    mock_detector.detect_faces.return_value = [sample_face_data]
     
     # Create mock hat processor
     mock_processor = MagicMock()
@@ -342,13 +342,13 @@ class TestCachingBehavior:
     def test_cache_hit_returns_cached_response(
         self, 
         sample_image_bytes,
-        mock_face_data,
+        sample_face_data,
         sample_rgba_image
     ):
         """Test that cache hit returns cached image without reprocessing."""
         # Create mock dependencies with cache enabled
         mock_detector = MagicMock()
-        mock_detector.detect_faces.return_value = [mock_face_data]
+        mock_detector.detect_faces.return_value = [sample_face_data]
         
         mock_processor = MagicMock()
         mock_processor.process_image.return_value = sample_rgba_image
@@ -376,12 +376,12 @@ class TestCachingBehavior:
     def test_cache_miss_processes_and_stores(
         self,
         sample_image_bytes,
-        mock_face_data,
+        sample_face_data,
         sample_rgba_image
     ):
         """Test that cache miss processes image and stores result."""
         mock_detector = MagicMock()
-        mock_detector.detect_faces.return_value = [mock_face_data]
+        mock_detector.detect_faces.return_value = [sample_face_data]
         
         mock_processor = MagicMock()
         mock_processor.process_image.return_value = sample_rgba_image
@@ -413,7 +413,7 @@ class TestCachingBehavior:
 class TestHatProcessorNotConfigured:
     """Tests for when hat processor is not configured."""
 
-    def test_returns_503_when_processor_none(self, mock_face_data):
+    def test_returns_503_when_processor_none(self, sample_face_data):
         """Test that 503 is returned when hat processor is None."""
         mock_detector = MagicMock()
         mock_cache = MagicMock()
@@ -490,12 +490,12 @@ class TestMultipleFaces:
         self,
         test_client,
         sample_image_bytes,
-        mock_multiple_faces,
+        sample_multiple_faces,
         sample_rgba_image,
         mock_app_dependencies
     ):
         """Test that multiple faces are all processed."""
-        mock_app_dependencies['detector'].detect_faces.return_value = mock_multiple_faces
+        mock_app_dependencies['detector'].detect_faces.return_value = sample_multiple_faces
         
         response = test_client.post(
             "/santa-hatify",
@@ -509,12 +509,12 @@ class TestMultipleFaces:
         self,
         test_client,
         sample_image_bytes,
-        mock_face_data,
+        sample_face_data,
         mock_app_dependencies
     ):
         """Test that face count is limited to MAX_FACES."""
         # Create 15 faces (more than default MAX_FACES of 10)
-        many_faces = [mock_face_data.copy() for _ in range(15)]
+        many_faces = [sample_face_data.copy() for _ in range(15)]
         mock_app_dependencies['detector'].detect_faces.return_value = many_faces
         
         response = test_client.post(

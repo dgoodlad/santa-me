@@ -15,19 +15,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
 # ============================================================================
-# Mock mediapipe if not installed (for local testing without mediapipe)
-# ============================================================================
-
-if 'mediapipe' not in sys.modules:
-    # Create mock mediapipe module
-    mock_mp = MagicMock()
-    mock_face_mesh = MagicMock()
-    mock_mp.solutions.face_mesh.FaceMesh.return_value = mock_face_mesh
-    mock_face_mesh.process.return_value = MagicMock(multi_face_landmarks=None)
-    sys.modules['mediapipe'] = mock_mp
-
-
-# ============================================================================
 # Environment Setup (disable AWS/S3 in tests)
 # ============================================================================
 
@@ -112,7 +99,7 @@ def santa_hat_image():
 # ============================================================================
 
 @pytest.fixture
-def mock_face_data():
+def sample_face_data():
     """Sample face detection data for a single face."""
     return {
         'forehead_top': {'x': 320.0, 'y': 100.0},
@@ -126,7 +113,7 @@ def mock_face_data():
 
 
 @pytest.fixture
-def mock_tilted_face_data():
+def sample_tilted_face_data():
     """Sample face detection data for a tilted face (15 degrees)."""
     return {
         'forehead_top': {'x': 330.0, 'y': 105.0},
@@ -140,7 +127,7 @@ def mock_tilted_face_data():
 
 
 @pytest.fixture
-def mock_multiple_faces():
+def sample_multiple_faces():
     """Sample face detection data for multiple faces."""
     return [
         {
@@ -162,38 +149,6 @@ def mock_multiple_faces():
             'all_landmarks': []
         }
     ]
-
-
-@pytest.fixture
-def mock_mediapipe_landmark():
-    """Create a mock MediaPipe landmark."""
-    def create_landmark(x, y, z=0):
-        landmark = MagicMock()
-        landmark.x = x
-        landmark.y = y
-        landmark.z = z
-        return landmark
-    return create_landmark
-
-
-@pytest.fixture
-def mock_mediapipe_face_landmarks(mock_mediapipe_landmark):
-    """Create mock MediaPipe face landmarks for a 640x480 image."""
-    # Create 468 landmarks (MediaPipe Face Mesh has 468 landmarks)
-    landmarks = [mock_mediapipe_landmark(0.5, 0.5) for _ in range(468)]
-    
-    # Set key landmarks used in face_detection.py
-    # Values are normalized (0-1), will be multiplied by image dimensions
-    landmarks[10] = mock_mediapipe_landmark(0.5, 0.2)    # forehead_top
-    landmarks[109] = mock_mediapipe_landmark(0.35, 0.25)  # forehead_left
-    landmarks[338] = mock_mediapipe_landmark(0.65, 0.25)  # forehead_right
-    landmarks[151] = mock_mediapipe_landmark(0.5, 0.8)    # chin
-    landmarks[33] = mock_mediapipe_landmark(0.375, 0.4)   # left_eye
-    landmarks[263] = mock_mediapipe_landmark(0.625, 0.4)  # right_eye
-    
-    face_landmarks = MagicMock()
-    face_landmarks.landmark = landmarks
-    return face_landmarks
 
 
 # ============================================================================

@@ -1,7 +1,7 @@
 # Makefile for Santa Hat API
 # Run tests and other development tasks
 
-.PHONY: help test test-unit test-debug test-file test-coverage test-watch build-test clean lint
+.PHONY: help test test-unit test-debug test-file test-coverage test-watch build-test clean lint install install-dev venv
 
 define HELP_TEXT
 Santa Hat API - Development Commands
@@ -22,6 +22,9 @@ Build Commands:
   make build-app     - Build production Docker image
 
 Development Commands:
+  make install       - Install all dependencies (app + test)
+  make install-dev   - Same as install (alias)
+  make venv          - Create virtual environment and install dependencies
   make run           - Run the application locally
   make run-docker    - Run the application in Docker
   make clean         - Remove build artifacts and coverage files
@@ -99,6 +102,22 @@ build-app:
 # ============================================================================
 # Development Commands
 # ============================================================================
+
+# Install all dependencies (app + test)
+install:
+	pip install -r requirements.txt -r requirements-test.txt
+
+# Alias for install
+install-dev: install
+
+# Create virtual environment and install all dependencies
+venv:
+	python -m venv .venv
+	. .venv/bin/activate && pip install --upgrade pip
+	. .venv/bin/activate && pip install -r requirements.txt -r requirements-test.txt
+	@echo ""
+	@echo "Virtual environment created. Activate with:"
+	@echo "  source .venv/bin/activate"
 
 # Run application locally
 run:

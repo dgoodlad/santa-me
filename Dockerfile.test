@@ -1,0 +1,36 @@
+# Test Dockerfile for Santa Hat API
+# This image is used to run the test suite in isolation
+
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies for MediaPipe and OpenCV
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    libgl1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements files
+COPY requirements.txt .
+COPY requirements-test.txt .
+
+# Install Python dependencies (including test dependencies)
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-test.txt
+
+# Copy application code
+COPY app/ ./app/
+COPY static/ ./static/
+COPY tests/ ./tests/
+COPY pytest.ini .
+
+# Set Python path
+ENV PYTHONPATH=/app
+
+# Default command runs pytest with coverage
+CMD ["pytest", "tests/", "-v", "--cov=app", "--cov-report=term-missing", "--cov-report=html:coverage_html"]

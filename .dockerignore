@@ -27,12 +27,18 @@ Thumbs.db
 README.md
 static/README.md
 
-# Testing
-tests/
+# Testing (cache/output files only - tests/ needed for Dockerfile.test)
 .pytest_cache/
 .coverage
+coverage_html/
+coverage.xml
 
 # Docker
 Dockerfile
+Dockerfile.test
 docker-compose.yml
+docker-compose.test.yml
 .dockerignore
+
+# Build
+Makefile

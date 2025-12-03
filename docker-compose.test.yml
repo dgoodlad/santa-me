@@ -1,0 +1,101 @@
+version: '3.8'
+
+services:
+  # Run all tests
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: santa-hat-api-test
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      # Ensure AWS credentials are not used in tests
+      - AWS_ACCESS_KEY_ID=
+      - AWS_SECRET_ACCESS_KEY=
+      - S3_BUCKET_NAME=
+    volumes:
+      # Mount source for development (live reload of tests)
+      - ./app:/app/app:ro
+      - ./tests:/app/tests:ro
+      - ./static:/app/static:ro
+      - ./pytest.ini:/app/pytest.ini:ro
+      # Mount coverage output directory
+      - ./coverage_html:/app/coverage_html
+
+  # Run tests with specific markers or paths
+  test-unit:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: santa-hat-api-test-unit
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - AWS_ACCESS_KEY_ID=
+      - AWS_SECRET_ACCESS_KEY=
+      - S3_BUCKET_NAME=
+    command: ["pytest", "tests/", "-v", "-m", "not integration", "--tb=short"]
+    volumes:
+      - ./app:/app/app:ro
+      - ./tests:/app/tests:ro
+      - ./static:/app/static:ro
+      - ./pytest.ini:/app/pytest.ini:ro
+
+  # Run tests with verbose output and stop on first failure
+  test-debug:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: santa-hat-api-test-debug
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - AWS_ACCESS_KEY_ID=
+      - AWS_SECRET_ACCESS_KEY=
+      - S3_BUCKET_NAME=
+    command: ["pytest", "tests/", "-v", "-x", "--tb=long", "-s"]
+    volumes:
+      - ./app:/app/app:ro
+      - ./tests:/app/tests:ro
+      - ./static:/app/static:ro
+      - ./pytest.ini:/app/pytest.ini:ro
+
+  # Run specific test file
+  test-file:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: santa-hat-api-test-file
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - AWS_ACCESS_KEY_ID=
+      - AWS_SECRET_ACCESS_KEY=
+      - S3_BUCKET_NAME=
+      - TEST_FILE=${TEST_FILE:-tests/test_config.py}
+    entrypoint: ["sh", "-c", "pytest $$TEST_FILE -v --tb=short"]
+    volumes:
+      - ./app:/app/app:ro
+      - ./tests:/app/tests:ro
+      - ./static:/app/static:ro
+      - ./pytest.ini:/app/pytest.ini:ro
+
+  # Run tests with watch mode (using pytest-watch if available)
+  test-watch:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: santa-hat-api-test-watch
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - AWS_ACCESS_KEY_ID=
+      - AWS_SECRET_ACCESS_KEY=
+      - S3_BUCKET_NAME=
+    command: ["ptw", "--", "-v", "--tb=short"]
+    volumes:
+      - ./app:/app/app:ro
+      - ./tests:/app/tests:ro
+      - ./static:/app/static:ro
+      - ./pytest.ini:/app/pytest.ini:ro
